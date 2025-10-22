@@ -55,13 +55,17 @@ jobs:
         with:
           version: ${{ needs.get-product-version.outputs.product-version }}
           product: ${{ env.PKG_NAME }}
-          repositoryOwner: "hashicorp"
+          repositoryOwner: "${{ github.repository_owner }}"
+          repository: "consul-k8s"
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: metadata.json
           path: ${{ steps.generate-metadata-file.outputs.filepath }}
 
   build:
+    permissions:
+      contents: write
+      packages: write
     needs: [get-go-version, get-product-version]
     runs-on: ubuntu-22.04 # the GLIBC is too high on 22.04
     strategy:
@@ -149,7 +153,7 @@ jobs:
 
           export GIT_COMMIT=$(git rev-parse --short HEAD)
           export GIT_DIRTY=$(test -n "$(git status --porcelain)" && echo "+CHANGES")
-          export GIT_IMPORT=github.com/hashicorp/consul-k8s/version
+          export GIT_IMPORT=github.com/${{ github.repository_owner }}/consul-k8s/version
           export GOLDFLAGS="-X ${GIT_IMPORT}.GitCommit=${GIT_COMMIT}${GIT_DIRTY} -X ${GIT_IMPORT}.GitDescribe=${{ needs.get-product-version.outputs.product-version }}"
 
           ${{ matrix.env }} go build -o dist/${{ matrix.bin_name }} -ldflags "${GOLDFLAGS}" -tags=${{ matrix.gotags }} .
@@ -255,7 +259,7 @@ jobs:
             fi
             echo "Test PASSED, expected: ${VERSION}, got: ${CONSUL_K8S_VERSION}"
 
-      - name: Upload debian packages 
+      - name: Upload debian packages
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         if: matrix.goos == 'linux' && matrix.skip_packaging != 'true'
         with:
@@ -298,6 +302,12 @@ jobs:
           echo "full_dev_tag=${{ env.version }}" >> $GITHUB_ENV
           echo "minor_dev_tag=$(echo ${{ env.version }}| sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+(-[0-9a-zA-Z\+\.]+)?$/\1\2/')"
           echo "minor_dev_tag=$(echo ${{ env.version }}| sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+(-[0-9a-zA-Z\+\.]+)?$/\1\2/')" >> $GITHUB_ENV
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker Build (Action)
         uses: hashicorp/actions-docker-build@v2
@@ -317,13 +327,13 @@ jobs:
           bin_name: consul-k8s-control-plane
           workdir: control-plane
           tags: |
-            docker.io/hashicorp/${{ env.repo }}-control-plane:${{ env.version }}
-            public.ecr.aws/hashicorp/${{ env.repo }}-control-plane:${{ env.version }}
+            ghcr.io/${{ github.repository_owner }}${{ env.repo }}-control-plane:${{ env.version }}
+            # public.ecr.aws/hashicorp/${{ env.repo }}-control-plane:${{ env.version }}
           dev_tags: |
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}-${{ github.sha }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}-${{ github.sha }}
           extra_build_args: |
             GOLANG_VERSION=${{ needs.get-go-version.outputs.go-version }}
 
@@ -345,13 +355,13 @@ jobs:
           bin_name: consul-k8s-control-plane
           workdir: control-plane
           tags: |
-            docker.io/hashicorp/${{ env.repo }}-control-plane-fips:${{ env.version }}
-            public.ecr.aws/hashicorp/${{ env.repo }}-control-plane-fips:${{ env.version }}
+            ghcr.io/${{ github.repository_owner }}${{ env.repo }}-control-plane-fips:${{ env.version }}
+            # public.ecr.aws/hashicorp/${{ env.repo }}-control-plane-fips:${{ env.version }}
           dev_tags: |
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}-${{ github.sha }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}-${{ github.sha }}
           extra_build_args: |
             GOLANG_VERSION=${{ needs.get-go-version.outputs.go-version }}
 
@@ -387,6 +397,12 @@ jobs:
           echo "full_dev_tag=${{ env.version }}" >> $GITHUB_ENV
           echo "minor_dev_tag=$(echo ${{ env.version }}| sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+(-[0-9a-zA-Z\+\.]+)?$/\1\2/')"
           echo "minor_dev_tag=$(echo ${{ env.version }}| sed -E 's/([0-9]+\.[0-9]+)\.[0-9]+(-[0-9a-zA-Z\+\.]+)?$/\1\2/')" >> $GITHUB_ENV
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Docker Build (Action)
         if: ${{ !matrix.fips }}
@@ -406,17 +422,16 @@ jobs:
           bin_name: consul-k8s-control-plane
           workdir: control-plane
           tags: |
-            docker.io/hashicorp/${{ env.repo }}-control-plane:${{ env.version }}-ubi
-            public.ecr.aws/hashicorp/${{ env.repo }}-control-plane:${{ env.version }}-ubi
+            ghcr.io/${{ github.repository_owner }}${{ env.repo }}-control-plane:${{ env.version }}-ubi
+            # public.ecr.aws/hashicorp/${{ env.repo }}-control-plane:${{ env.version }}-ubi
           dev_tags: |
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}-ubi
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}-ubi-${{ github.sha }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}-ubi
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}-ubi-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}-ubi
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.full_dev_tag }}-ubi-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}-ubi
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane:${{ env.minor_dev_tag }}-ubi-${{ github.sha }}
           redhat_tag: quay.io/redhat-isv-containers/611ca2f89a9b407267837100:${{env.version}}-ubi
           extra_build_args: |
             GOLANG_VERSION=${{ needs.get-go-version.outputs.go-version }}
-
       - name: Docker FIPS Build (Action)
         if: ${{ matrix.fips }}
         uses: hashicorp/actions-docker-build@v2
@@ -435,13 +450,13 @@ jobs:
           bin_name: consul-k8s-control-plane
           workdir: control-plane
           tags: |
-            public.ecr.aws/hashicorp/${{ env.repo }}-control-plane-fips:${{ env.version }}-ubi
-            docker.io/hashicorp/${{ env.repo }}-control-plane-fips:${{ env.version }}-ubi
+            # public.ecr.aws/hashicorp/${{ env.repo }}-control-plane-fips:${{ env.version }}-ubi
+            ghcr.io/${{ github.repository_owner }}${{ env.repo }}-control-plane-fips:${{ env.version }}-ubi
           redhat_tag: quay.io/redhat-isv-containers/6486b1beabfc4e51588c0416:${{env.version}}-ubi # this is different than the non-FIPS one
           extra_build_args: |
             GOLANG_VERSION=${{ needs.get-go-version.outputs.go-version }}
           dev_tags: |
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}-ubi
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}-ubi-${{ github.sha }}
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}-ubi
-            docker.io/hashicorppreview/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}-ubi-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}-ubi
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.full_dev_tag }}-ubi-${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}-ubi
+            ghcr.io/${{ github.repository_owner }}/${{ env.repo }}-control-plane-fips:${{ env.minor_dev_tag }}-ubi-${{ github.sha }}
